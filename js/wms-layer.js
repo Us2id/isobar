@@ -82,22 +82,7 @@ class Part {
   showFrame(time, token) {
     const { map, options } = this.owner;
     return new Promise((resolve, reject) => {
-      const next = L.tileLayer.wms(this.spec.url, {
-        layers: this.spec.layer,
-        format: 'image/png',
-        transparent: true,
-        version: '1.3.0',
-        crs: L.CRS.EPSG3857,
-        tileSize: 512,
-        pane: this.spec.pane ?? options.pane,
-        zIndex: this.zIndex,
-        opacity: 0,
-        bounds: leafletBounds(this.spec.box),
-        attribution: options.attribution,
-        updateWhenZooming: false,
-        keepBuffer: 1,
-        ...(time ? { time } : {}),
-      });
+      const next = this.owner.makeFrame(this.spec, time, this.zIndex);
       let loaded = 0;
       let failed = 0;
       let settled = false;
@@ -140,6 +125,27 @@ export class WmsLayer {
     this.parts = options.parts.map((spec, index) => new Part(this, spec, index + 1));
     this.active = false;
     this.sync = this.sync.bind(this);
+  }
+
+  // One image set for a part, not yet on the map and not yet visible.
+  makeFrame(spec, time, zIndex) {
+    const { options } = this;
+    return L.tileLayer.wms(spec.url, {
+      layers: spec.layer,
+      format: 'image/png',
+      transparent: true,
+      version: '1.3.0',
+      crs: L.CRS.EPSG3857,
+      tileSize: 512,
+      pane: spec.pane ?? options.pane,
+      zIndex,
+      opacity: 0,
+      bounds: leafletBounds(spec.box),
+      attribution: options.attribution,
+      updateWhenZooming: false,
+      keepBuffer: 1,
+      ...(time ? { time } : {}),
+    });
   }
 
   start() {

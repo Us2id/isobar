@@ -28,3 +28,57 @@ export function describeWind(ms, fromDegrees, system) {
   const direction = fromDegrees == null ? '' : ` from ${degreesToCompass(fromDegrees)}`;
   return `Wind${direction} at ${fullSpeed(ms, system)}`;
 }
+
+// How each kind of value is shown, as [unit, decimals, convert from the stored unit].
+const same = (x) => x;
+const toInches = (mm) => mm / 25.4;
+const KINDS = {
+  temp: { metric: ['°C', 0, same], imperial: ['°F', 0, (c) => (c * 9) / 5 + 32] },
+  speed: { metric: ['km/h', 0, (ms) => ms * 3.6], imperial: ['mph', 0, (ms) => ms * 2.23694] },
+  rate: { metric: ['mm/h', 1, same], imperial: ['in/h', 2, toInches] },
+  depth: { metric: ['mm', 1, same], imperial: ['in', 2, toInches] },
+  depthCm: { metric: ['cm', 0, same], imperial: ['in', 1, (cm) => cm / 2.54] },
+  perDay: { metric: ['mm/day', 1, same], imperial: ['in/day', 2, toInches] },
+  pressure: { metric: ['hPa', 0, same], imperial: ['inHg', 2, (hpa) => hpa * 0.02953] },
+  height: { metric: ['m', 0, same], imperial: ['ft', 0, (m) => m * 3.28084] },
+  heightSmall: { metric: ['m', 1, same], imperial: ['ft', 1, (m) => m * 3.28084] },
+  distance: { metric: ['km', 1, same], imperial: ['mi', 1, (km) => km * 0.621371] },
+  percent: ['%', 0],
+  flux: ['W/m²', 0],
+  energy: ['J/kg', 0],
+  dbz: ['dBZ', 0],
+  micrograms: ['µg/m³', 0],
+  aqi: ['', 0],
+};
+
+function resolve(unit, system) {
+  if (typeof unit === 'object') return [unit.u, unit.dp, same];
+  const kind = KINDS[unit];
+  if (!kind) throw new Error(`Unknown unit ${unit}`);
+  return Array.isArray(kind) ? [kind[0], kind[1], same] : kind[system];
+}
+
+export const unitLabel = (unit, system) => {
+  if (unit === 'direction' || unit === 'category') return '';
+  return resolve(unit, system)[0];
+};
+
+// A bare number in the display unit, for legend ticks.
+export function formatNumber(value, unit, system) {
+  if (unit === 'direction') return `${Math.round(value)}°`;
+  if (unit === 'category') return '';
+  const [, decimals, convert] = resolve(unit, system);
+  const shown = convert(value);
+  // A value just under zero would otherwise round to "-0".
+  return shown.toFixed(Math.abs(shown) >= 100 ? 0 : decimals).replace(/\.0+$/, '').replace(/^-0$/, '0');
+}
+
+// A value with its unit, for readouts.
+export function formatValue(value, unit, system, categories) {
+  if (unit === 'direction') return `from ${degreesToCompass(value)} (${Math.round(value)}°)`;
+  if (unit === 'category') return categories?.[Math.round(value)] ?? '';
+  const [label] = resolve(unit, system);
+  const number = formatNumber(value, unit, system);
+  if (!label) return number;
+  return /^[°%]/.test(label) ? `${number}${label}` : `${number} ${label}`;
+}

@@ -15,20 +15,25 @@ export const stormNote = (count) => {
   return count === 1 ? '1 storm warning' : `${count} storm warnings`;
 };
 
+export const stormColor = (feature) => STORM_WARNINGS.colors[feature.properties.event] ?? '#ffffff';
+
 export class AlertsLayer {
   constructor(map, onStatus) {
     this.map = map;
     this.onStatus = onStatus;
     this.active = false;
-    this.mapLayer = new WmsLayer(map, ALERT_MAP, (status) => {
+    this.mapLayer = this.makeMapLayer((status) => {
       const cameIntoCoverage = this.mapStatus.state === 'outside' && status.state !== 'outside';
       this.mapStatus = status;
       this.report();
       // The map may have just moved into coverage, and the next timed check could be a minute away.
       if (cameIntoCoverage && this.stormCount === null) this.loadStorms().catch(() => {});
     });
-    this.renderer = L.svg({ pane: 'storms' });
     this.reset();
+  }
+
+  makeMapLayer(onStatus) {
+    return new WmsLayer(this.map, ALERT_MAP, onStatus);
   }
 
   reset() {
@@ -78,8 +83,9 @@ export class AlertsLayer {
 
   draw(features) {
     const shaped = features.filter((feature) => feature.geometry);
+    this.renderer ??= L.svg({ pane: 'storms' });
     const shared = { renderer: this.renderer, interactive: false };
-    const colorOf = (feature) => STORM_WARNINGS.colors[feature.properties.event] ?? '#ffffff';
+    const colorOf = stormColor;
     const group = L.layerGroup([
       // A dark outline under each shape keeps it readable over any map color.
       L.geoJSON(shaped, { ...shared, style: () => ({ color: '#07101c', weight: 4.5, opacity: 0.85, fill: false }) }),

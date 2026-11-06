@@ -18,6 +18,14 @@ export const formatHour = (time, { timeZone, locale } = {}) =>
 export const formatWeekday = (time, { timeZone, locale, style = 'long' } = {}) =>
   new Intl.DateTimeFormat(locale, { weekday: style, timeZone }).format(time);
 
+// Just the hour when it's today, with the weekday otherwise.
+export function formatForecastTime(time, now, { timeZone, locale } = {}) {
+  const day = (t) => new Intl.DateTimeFormat('en-CA', { timeZone, dateStyle: 'short' }).format(t);
+  const clock = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone }).format(time);
+  if (day(time) === day(now)) return clock;
+  return `${new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone }).format(time)} ${clock}`;
+}
+
 export function hourInZone(time, timeZone) {
   const text = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone }).format(time);
   return Number(text);

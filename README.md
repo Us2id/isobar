@@ -1,26 +1,43 @@
 # Isobar
 
-A free, open-source live weather map. Animated wind, radar, satellite, lightning and alerts, built on public NOAA data. Click anywhere for a forecast.
+A free, open-source live weather map of the whole world. It has animated wind and ocean currents, radar, satellite views, cyclones, airports and hundreds of forecast and measurement layers: temperature, rain, soil moisture, evapotranspiration, air quality, waves and more. Click anywhere for a forecast.
 
 **Live site: <https://us2id.github.io/isobar/>**
 
-It's a static site with no server and no database. Each visitor's browser fetches the latest data directly from NOAA and keeps checking while the page is open, so nothing has to be loaded by hand and hosting costs nothing.
+It's a static site with no server and no database. Each visitor's browser fetches the latest data directly from the public services below and keeps checking while the page is open, so nothing has to be loaded by hand and hosting costs nothing.
 
-## Layers
+## What's on the map
 
-| Layer | Source | Coverage | Typical age | Checked every |
-|---|---|---|---|---|
-| Wind flow | [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) forecast, 0.25° thinned to 0.5° | World | Forecast for the current hour | 15 min |
-| Radar | [NWS MRMS](https://opengeo.ncep.noaa.gov/geoserver/www/index.html) | US states and territories | About 2–5 min | 2 min |
-| Lightning | [NOAA nowCOAST](https://nowcoast.noaa.gov/) strike density | Americas and Pacific | About 15–30 min | 5 min |
-| Satellite | NOAA nowCOAST infrared: GOES, plus an hourly world mosaic | World | GOES about 10 min, mosaic up to a few hours | 5 min |
-| Alerts | NOAA nowCOAST map, plus [api.weather.gov](https://www.weather.gov/documentation/services-web-api) for storm warnings | US | About 2 min | 5 min for the map, 1 min for storm warnings |
+The map opens as a 3D globe. A button switches to a flat map and back, and every layer works on both. Overlays can be combined, and one layer at a time can color the whole map.
 
-Clicking the map shows the next 48 hours and 7 days from the National Weather Service inside the US, and from [Open-Meteo](https://open-meteo.com/) elsewhere or when NWS is down, along with any active alerts for that spot.
+| Overlay | Source | Coverage |
+|---|---|---|
+| Wind flow, at 8 heights | NOAA GFS or ECMWF | World |
+| Radar (US) | [NWS MRMS](https://opengeo.ncep.noaa.gov/geoserver/www/index.html) | US |
+| Radar (world), with a 2-hour loop | [RainViewer](https://www.rainviewer.com/), up to zoom 7 | Wherever radars report |
+| Lightning | [NOAA nowCOAST](https://nowcoast.noaa.gov/) | Americas and Pacific |
+| Satellite | NOAA nowCOAST | World |
+| Alerts | nowCOAST and [api.weather.gov](https://www.weather.gov/documentation/services-web-api) | US |
+| Tropical cyclones | [GDACS](https://www.gdacs.org/) | World |
+| Pressure lines | NOAA GFS or ECMWF | World |
+| Ocean currents | NOAA CFS, 1° | World |
+| Airports and flight rules | [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) METAR | World |
+| Fires and natural events | [NASA EONET](https://eonet.gsfc.nasa.gov/) | World |
 
-The wind lines follow the forecast and are sped up so you can see them. They don't show the air moving live.
+The color layers come from two kinds of source:
 
-**Isobar is not an official source.** Data can be late or missing. For warnings you can act on, use [weather.gov](https://www.weather.gov/).
+- **Forecast fields**, read value by value in the browser, so the map can show a number under the cursor and move through time up to 16 days ahead: [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/), GFS Wave, GEFS Aerosols and CFS Ocean, and [ECMWF IFS and AIFS open data](https://www.ecmwf.int/en/forecasts/datasets/open-data). Reference evapotranspiration (FAO-56) and growing degree days are computed from those fields.
+- **Finished images**: [NASA GIBS](https://earthdata.nasa.gov/gibs) satellite products, and NOAA's outlooks, hazards, rainfall and river services. These can't show a number under the cursor.
+
+Clicking the map shows the next 48 hours and 7 days from the National Weather Service inside the US, and from [Open-Meteo](https://open-meteo.com/) elsewhere or when NWS is down, with any active alerts for that spot. Tabs add more weather, soil and farming, air quality, sea and rivers, and a comparison of 8 forecast models.
+
+The moving lines follow the forecast and are sped up so you can see them. They don't show the air or water moving live.
+
+Place names come in by importance as you zoom: major countries first, then smaller countries and capitals, then states, then cities by size, then towns and villages. `PLACE_LADDER` in `js/basemap.js` holds the zoom for each kind, and `npm run labels` (see below) measures how much of the screen they cover.
+
+Tested in Chrome, in WebKit (the engine behind Safari) and in Chrome on an Android phone emulator. Two things differ in Safari: cyclone tracks don't load, because GDACS's bot check blocks the request, so the layer says "tracks unavailable here" and still shows the storms; and the wind lines run at 30 frames a second on the flat map rather than 60.
+
+**Isobar is not an official source.** Forecast values are model output and can be wrong, late or missing. For warnings you can act on, use [weather.gov](https://www.weather.gov/) or your national weather service.
 
 ## Run it
 
@@ -40,7 +57,18 @@ The tests need Node 22 or newer, with no packages to install.
 npm test
 ```
 
-They cover the data handling: the GRIB decoder, picking the newest NOAA run, forecast and alert parsing, fallbacks, scheduling and the chart's layout. Drawing on the map isn't covered, so check that in a browser after changing it.
+They cover the data handling: the GRIB decoders, picking the newest run, the layer catalog and its formulas, forecast and alert parsing, fallbacks, scheduling and the chart's layout. Drawing on the map isn't covered, so check that in a browser after changing it.
+
+Two more tools download real data, so they aren't part of `npm test`:
+
+```sh
+npm run check-fields    # is every forecast layer's data there, and in a sensible range? (about 300 MB)
+npm run cross-check     # do our values match Open-Meteo's copy of the same models?
+```
+
+Run them when something looks off, or to find out whether a source changed its files. Add words after `npm run check-fields --` to check only the layers whose ids contain them.
+
+The label measurement counts the names on screen and the share of the screen they cover at each zoom, over four parts of the world; it was 22% at continent scale before the ladder and is 8% or less now.
 
 ## Publish it on GitHub Pages
 
@@ -48,7 +76,7 @@ They cover the data handling: the GRIB decoder, picking the newest NOAA run, for
 2. In the repository, open **Settings > Pages**.
 3. Under **Build and deployment**, choose **Deploy from a branch**, then `main` and `/ (root)`.
 
-The site appears at `https://<your-username>.github.io/<repository>/`. Every later push to `main` updates it. Weather data goes straight from NOAA to each visitor, so it doesn't count toward GitHub's limits.
+The site appears at `https://<your-username>.github.io/<repository>/`. Every later push to `main` updates it. Weather data goes straight from its source to each visitor, so it doesn't count toward GitHub's limits.
 
 ## How it's organized
 
@@ -56,21 +84,30 @@ There's no framework and no build step. What's in `js/` is exactly what the brow
 
 | File | What it does |
 |---|---|
-| `config.js` | Every data source, refresh interval and color. Start here to change a layer. |
+| `catalog/fields.js` | Every forecast layer: its files, formula, unit and colors. Add a layer by adding a line. |
+| `catalog/imagery.js` | Every NASA and NOAA image layer. Also one line each. |
+| `config.js` | Overlay sources, refresh intervals and legends. |
 | `main.js` | Connects the map, layers, controls and forecast strip. |
-| `wms-layer.js` | Image layers from NOAA's map services. Only reloads when a newer image exists, and swaps it in without a blink. |
-| `alerts-layer.js` | The alert map plus directly fetched storm warnings. |
-| `wind-layer.js`, `wind-worker.js` | Downloads wind off the main thread and draws it with leaflet-velocity. |
-| `grib2.js`, `wind-grid.js` | Reads NOAA's GRIB2 files in the browser. Only the two wind fields are downloaded, about 1.9 MB, using HTTP range requests. |
-| `forecast.js` | NWS and Open-Meteo forecasts and alerts, all in one shape. |
-| `strip.js`, `meteogram.js` | The forecast strip and its chart. |
+| `sources.js` | Where each model's files live, which run to use, and how to read their indexes. |
+| `grid-worker.js`, `grid-service.js` | Download and unpack fields off the main thread, using HTTP range requests so only the needed part of each file comes down. |
+| `grib2.js`, `aec.js`, `jpeg2000.js` | Read GRIB2 in the browser, including ECMWF's CCSDS packing and NOAA's JPEG 2000. |
+| `field-layer.js`, `field-paint.js`, `palettes.js` | Paint a field onto map tiles. |
+| `flow-layer.js`, `isobars.js`, `points-layers.js` | Moving lines, pressure lines, cyclones, airports and events. |
+| `image-layers.js`, `gibs-day.js`, `wms-layer.js` | Layers that arrive as finished images. |
+| `basemap.js` | The base map's colors, Latin-only names and the place-name ladder. |
+| `globe.js`, `globe-layers.js`, `globe-flow.js`, `globe-helpers.js`, `png.js` | The 3D globe: MapLibre's globe view, with every layer above drawn on it. Only the drawing differs; data, timing and status are shared with the flat map. |
+| `panel.js`, `timeline.js`, `search.js` | The layer list, the time bar and place search. |
+| `forecast.js`, `point-data.js`, `strip.js`, `meteogram.js` | Everything for a clicked point. |
 | `schedule.js` | Repeats a task while the tab is visible and retries after failures. Hidden tabs ask for nothing. |
 
 ## Data and credits
 
-- NOAA and NWS data is public domain. Please keep the credit line and don't make it look like an official NOAA site.
+- NOAA, NWS and NASA data is public domain. Please keep the credit lines and don't make this look like an official site.
+- [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data) is CC BY 4.0.
+- [RainViewer](https://www.rainviewer.com/api.html)'s free API is for personal, educational and small community use, and requires the "Weather data by RainViewer" credit beside its data. It's limited to zoom 7 and 100 requests a minute for each visitor.
 - [Open-Meteo](https://open-meteo.com/) data is CC BY 4.0, and its free API is for non-commercial use, under 10,000 calls a day. Keep the "Weather data by Open-Meteo.com" link beside its data.
-- The base map is [OpenFreeMap](https://openfreemap.org/) with [OpenMapTiles](https://www.openmaptiles.org/) and [OpenStreetMap](https://www.openstreetmap.org/copyright) data. Keep their credits.
+- [GDACS](https://www.gdacs.org/) cyclone data and [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) airport data are credited on the map while those layers are on.
+- The base map is [OpenFreeMap](https://openfreemap.org/) with [OpenMapTiles](https://www.openmaptiles.org/) and [OpenStreetMap](https://www.openstreetmap.org/copyright) data, drawn by [MapLibre GL](https://maplibre.org/) on the globe and through [Leaflet](https://leafletjs.com/) on the flat map. Keep their credits.
 - The bundled libraries and font are listed in [vendor/README.md](vendor/README.md).
 
 ## License

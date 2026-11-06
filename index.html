@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://opengeo.ncep.noaa.gov https://nowcoast.noaa.gov https://tiles.openfreemap.org; connect-src https://noaa-gfs-bdp-pds.s3.amazonaws.com https://opengeo.ncep.noaa.gov https://nowcoast.noaa.gov https://api.weather.gov https://api.open-meteo.com https://tiles.openfreemap.org; worker-src 'self' blob:; child-src blob:; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://opengeo.ncep.noaa.gov https://nowcoast.noaa.gov https://tiles.openfreemap.org https://gibs.earthdata.nasa.gov https://mapservices.weather.noaa.gov https://tilecache.rainviewer.com; connect-src https://noaa-gfs-bdp-pds.s3.amazonaws.com https://noaa-gefs-pds.s3.amazonaws.com https://noaa-cfs-pds.s3.amazonaws.com https://data.ecmwf.int https://opengeo.ncep.noaa.gov https://nowcoast.noaa.gov https://mapservices.weather.noaa.gov https://gibs.earthdata.nasa.gov https://api.weather.gov https://api.open-meteo.com https://air-quality-api.open-meteo.com https://marine-api.open-meteo.com https://flood-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://tilecache.rainviewer.com https://tiles.openfreemap.org https://www.gdacs.org https://mesonet.agron.iastate.edu https://eonet.gsfc.nasa.gov; worker-src 'self' blob:; child-src blob:; manifest-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Isobar: live weather map</title>
-<meta name="description" content="A free, open-source weather map: animated wind, radar, satellite, lightning and alerts from public NOAA data. Click anywhere for a forecast.">
+<meta name="description" content="A free, open-source weather globe and map: animated wind, radar, satellite, cyclones, soil, air quality and hundreds of forecast layers from public data. Click anywhere for a forecast.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="vendor/maplibre-gl/maplibre-gl.css">
@@ -13,6 +13,8 @@
 </head>
 <body>
 <main id="map" aria-label="Weather map. Use the arrow keys to move and Enter for a forecast at the center."></main>
+<div id="globe" hidden></div>
+<button type="button" id="view-toggle" aria-pressed="false" hidden>3D globe</button>
 
 <section id="rail" aria-label="Map layers">
   <header class="rail-head">
@@ -25,8 +27,31 @@
       <button type="button" id="about-open" class="quiet-button">About</button>
     </div>
   </header>
-  <ul id="layer-list"></ul>
+  <div class="place-search">
+    <input type="search" id="place-input" placeholder="Search a place, or lat, long" aria-label="Search a place or coordinates" aria-controls="place-results" aria-expanded="false" autocomplete="off">
+    <button type="button" id="locate" title="Use my location" aria-label="Use my location">◎</button>
+    <ul id="place-results" hidden></ul>
+  </div>
+  <button type="button" id="layers-toggle" aria-expanded="false" aria-controls="panel-body">All layers</button>
+  <div id="panel-body">
+    <h2 class="rail-title">On the map</h2>
+    <ul id="layer-list"></ul>
+    <h2 class="rail-title">Color the map</h2>
+    <label class="model-control"><span>Forecast model</span><select id="model-select"></select></label>
+    <input type="search" id="layer-filter" placeholder="Find a layer: soil, waves, ozone" aria-label="Find a layer">
+    <p id="filter-empty" class="filter-empty" hidden>No layer matches that. Try wind, rain, waves or soil.</p>
+    <div id="fill-groups"></div>
+  </div>
 </section>
+
+<div id="fill-active" hidden></div>
+
+<div id="timeline" hidden>
+  <button type="button" data-action="play">Play</button>
+  <input type="range" min="0" value="0" step="1" aria-label="Forecast time shown on the map">
+  <output></output>
+  <button type="button" data-action="now" class="quiet-button" hidden>Back to now</button>
+</div>
 
 <p id="hint" hidden>Click or tap the map for a forecast</p>
 <p id="readout" hidden></p>
@@ -37,47 +62,67 @@
     <div class="strip-title">
       <h2 id="strip-place"></h2>
       <p id="strip-now"></p>
+      <p id="strip-map-value" hidden></p>
     </div>
-    <button type="button" id="strip-close">Close</button>
+    <div class="strip-tools">
+      <button type="button" id="strip-save" class="text-button"></button>
+      <button type="button" id="strip-copy" class="text-button">Copy coordinates</button>
+      <button type="button" id="strip-close">Close</button>
+    </div>
   </header>
-  <section id="strip-alerts" aria-label="Alerts for this spot"></section>
-  <div class="strip-grid">
-    <section class="strip-chart-box" aria-label="Forecast chart">
-      <div class="chart-caption">
-        <p id="chart-key" hidden>
-          <span class="key key-trace">Temperature</span>
-          <span class="key key-rain">Chance of rain or snow</span>
-          <span class="key key-wind">Wind</span>
-        </p>
-        <p id="chart-readout" hidden></p>
-      </div>
-      <div id="strip-chart"></div>
-    </section>
-    <ol id="strip-days" aria-label="Next 7 days"></ol>
+  <div class="strip-tabs" role="tablist" aria-label="Kinds of forecast data">
+    <button type="button" role="tab" data-tab="forecast" aria-selected="true">Forecast</button>
+    <button type="button" role="tab" data-tab="weather" aria-selected="false">More weather</button>
+    <button type="button" role="tab" data-tab="soil" aria-selected="false">Soil and farming</button>
+    <button type="button" role="tab" data-tab="air" aria-selected="false">Air quality</button>
+    <button type="button" role="tab" data-tab="sea" aria-selected="false">Sea and rivers</button>
+    <button type="button" role="tab" data-tab="models" aria-selected="false">Compare models</button>
   </div>
-  <p id="strip-source"></p>
+  <div id="strip-forecast">
+    <section id="strip-alerts" aria-label="Alerts for this spot"></section>
+    <div class="strip-grid">
+      <section class="strip-chart-box" aria-label="Forecast chart">
+        <div class="chart-caption">
+          <p id="chart-key" hidden>
+            <span class="key key-trace">Temperature</span>
+            <span class="key key-rain">Chance of rain or snow</span>
+            <span class="key key-wind">Wind</span>
+          </p>
+          <p id="chart-readout" hidden></p>
+        </div>
+        <div id="strip-chart"></div>
+      </section>
+      <ol id="strip-days" aria-label="Next 7 days"></ol>
+    </div>
+    <p id="strip-source"></p>
+  </div>
+  <div id="strip-tab-panel" hidden></div>
 </aside>
 
 <dialog id="about" aria-labelledby="about-title">
   <h2 id="about-title" tabindex="-1" autofocus>About Isobar</h2>
-  <p>A free, open-source weather map. It has no server: your browser asks NOAA and the other services below for the latest data and keeps checking while the page is open. <a href="https://github.com/Us2id/isobar" target="_blank" rel="noopener">See the code on GitHub</a>.</p>
-  <p><strong>Not an official source.</strong> Data can be late or missing. For warnings you can act on, use <a href="https://www.weather.gov/" target="_blank" rel="noopener">weather.gov</a>.</p>
+  <p>A free, open-source weather map with <span id="layer-count"></span> layers, shown on a 3D globe or a flat map. It has no server: your browser asks public data services directly and keeps checking while the page is open. <a href="https://github.com/Us2id/isobar" target="_blank" rel="noopener">See the code on GitHub</a>.</p>
+  <p><strong>Not an official source.</strong> Forecast values are model output and can be wrong, late or missing. For warnings you can act on, use <a href="https://www.weather.gov/" target="_blank" rel="noopener">weather.gov</a> or your national weather service.</p>
   <h3>Where the data comes from</h3>
   <dl>
-    <dt>Wind flow</dt>
-    <dd>NOAA GFS forecast for the current hour, worldwide. The lines follow the forecast and are sped up so you can see them. They don't show the air moving live.</dd>
+    <dt>Forecast maps</dt>
+    <dd>NOAA GFS, GFS Wave, GEFS Aerosols and CFS Ocean, and ECMWF IFS and AIFS open data, read directly in your browser. ECMWF data is licensed CC BY 4.0.</dd>
     <dt>Radar</dt>
-    <dd>NOAA MRMS through the National Weather Service. US only, usually a few minutes old.</dd>
-    <dt>Lightning</dt>
-    <dd>Strike density from NOAA nowCOAST, in 15-minute periods. Covers the Americas and the Pacific.</dd>
-    <dt>Satellite</dt>
-    <dd>Infrared imagery from NOAA nowCOAST. GOES updates every 5 minutes between about 11°N and 50°N across the Americas. Everywhere else uses an hourly world mosaic that can be a few hours old.</dd>
-    <dt>Alerts</dt>
-    <dd>National Weather Service watches and warnings, through nowCOAST and api.weather.gov. US only.</dd>
-    <dt>Forecasts</dt>
-    <dd>National Weather Service inside the US. <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> everywhere else.</dd>
+    <dd>US: NOAA MRMS through the National Weather Service. World: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>, limited to zoom 7 on its free plan.</dd>
+    <dt>Satellite views and measurements</dt>
+    <dd><a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">NASA GIBS</a> and NOAA nowCOAST. Many NASA products are a day or more behind.</dd>
+    <dt>Lightning and alerts</dt>
+    <dd>NOAA nowCOAST and the National Weather Service.</dd>
+    <dt>US outlooks</dt>
+    <dd>NOAA's Storm Prediction, Weather Prediction and Climate Prediction Centers, and the National Water Model.</dd>
+    <dt>Cyclones and events</dt>
+    <dd><a href="https://www.gdacs.org/" target="_blank" rel="noopener">GDACS</a> and <a href="https://eonet.gsfc.nasa.gov/" target="_blank" rel="noopener">NASA EONET</a>.</dd>
+    <dt>Airports</dt>
+    <dd><a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noopener">Iowa Environmental Mesonet</a>.</dd>
+    <dt>Forecasts for a spot</dt>
+    <dd>National Weather Service inside the US. <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> everywhere else, and for soil, air, sea and model comparisons.</dd>
     <dt>Base map</dt>
-    <dd><a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> with <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> and <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> data.</dd>
+    <dd><a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> with <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> and <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> data. Drawn by <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL</a> on the globe and <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> on the flat map.</dd>
   </dl>
   <button type="button" id="about-close">Close</button>
 </dialog>

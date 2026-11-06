@@ -46,9 +46,39 @@ test('reads a group where every value is the same, which takes no bits', () => {
   closeTo(decodeGrib2(complexPacked({ nx: 4, ny: 2 }, ints, { groups: [6, 2] })).values, ints);
 });
 
+test('puts values back on the full grid using a bitmap, with gaps as NaN', () => {
+  // Five points, of which the second and fifth have no data.
+  const bytes = simplePacked({ nx: 5, ny: 1 }, [10, 20, 30], { bits: 8, bitmapBits: [1, 0, 1, 1, 0] });
+  const field = decodeGrib2(bytes);
+  assert.equal(field.values.length, 5);
+  assert.deepEqual([...field.values].map((v) => (Number.isNaN(v) ? null : v)), [10, null, 20, 30, null]);
+});
+
+test('reads complex packing under a bitmap, as GFS soil and wave fields use', () => {
+  const ints = [100, 103, 101, 98, 110, 120];
+  const bytes = complexPacked({ nx: 4, ny: 2 }, ints, { groups: [3, 3], bitmapBits: [1, 1, 0, 1, 1, 1, 0, 1] });
+  const values = [...decodeGrib2(bytes).values];
+  assert.deepEqual(values.map((v) => (Number.isNaN(v) ? null : v)), [100, 103, null, 101, 98, 110, null, 120]);
+});
+
+test('skips missing values when undoing the differencing', () => {
+  // Every null is marked inside the packed data rather than in a bitmap.
+  const series = [100, null, 103, 101, null, null, 98, 110];
+  const bytes = complexPacked({ nx: 4, ny: 2 }, series, { order: 2, groups: [8], missingManagement: 1 });
+  const values = [...decodeGrib2(bytes).values];
+  assert.deepEqual(values.map((v) => (Number.isNaN(v) ? null : v)), series);
+});
+
+test('reads a whole group marked missing, which takes no bits', () => {
+  const series = [5, 6, 7, null, null, null, 9, 12];
+  const bytes = complexPacked({ nx: 4, ny: 2 }, series, { order: 1, groups: [3, 3, 2], missingManagement: 1 });
+  const values = [...decodeGrib2(bytes).values];
+  assert.deepEqual(values.map((v) => (Number.isNaN(v) ? null : v)), series);
+});
+
 test('refuses formats it cannot read instead of returning wrong numbers', () => {
   const grid = { nx: 2, ny: 1, la1: 0, lo1: 0, lov: 0, dx: 1, dy: 1, lat0: 0 };
-  assert.throws(() => decodeGrib2(simplePacked(grid, [1, 2], { lambert: true, bitmap: 0 })), /bitmap/);
-  const managed = complexPacked({ nx: 2, ny: 2 }, [1, 2, 3, 4], { groups: [2, 2], missingManagement: 1 });
+  assert.throws(() => decodeGrib2(simplePacked(grid, [1, 2], { lambert: true, bitmap: 254 })), /bitmap/);
+  const managed = complexPacked({ nx: 2, ny: 2 }, [1, 2, 3, 4], { groups: [2, 2], missingManagement: 3 });
   assert.throws(() => decodeGrib2(managed), /missing-value/);
 });

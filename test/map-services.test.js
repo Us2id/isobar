@@ -86,7 +86,9 @@ test('adapts the base map without disturbing anything else', async () => {
       { id: 'boundary', type: 'line' },
     ],
   };
-  const [background, water, city, road, boundary] = adaptStyle(style).layers;
+  const { layers } = adaptStyle(style);
+  const find = (id) => layers.find((layer) => layer.id === id);
+  const [background, water, city, road, boundary] = [find('background'), find('water'), find('place-city-3'), find('highway_ref'), find('boundary')];
   assert.notEqual(background.paint['background-color'], '#45516E');
   assert.notEqual(water.paint['fill-color'], '#38435C');
   assert.equal(water.paint['fill-opacity'], 0.5);

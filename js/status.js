@@ -1,4 +1,4 @@
-import { formatAge, formatClock } from './format.js';
+import { formatAge, formatClock, formatForecastTime } from './format.js';
 
 // Turns a layer's status into the words shown beside it.
 // `tone` is 'normal', 'warn' (working but out of date) or 'error' (not working).
@@ -13,7 +13,11 @@ export function describeStatus(status, now = Date.now(), options = {}) {
       return { text: `${status.message}${shown}`, tone: 'error' };
     }
     case 'ok':
-      if (status.validTime) return { text: `Forecast for ${formatClock(status.validTime, options)}`, tone: 'normal' };
+      if (status.validTime) {
+        const when = formatForecastTime(status.validTime, now, options);
+        return { text: status.note ? `Forecast for ${when}. ${status.note}.` : `Forecast for ${when}`, tone: 'normal' };
+      }
+      if (status.note && !status.checkedAt) return { text: status.note, tone: 'normal' };
       if (status.dataTime) {
         const age = now - status.dataTime;
         if (status.staleAfterMs && age > status.staleAfterMs) {
